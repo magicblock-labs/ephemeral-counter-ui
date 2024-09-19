@@ -8,7 +8,8 @@ target
 node_modules
 test-ledger
 .yarn
-node_modules
+*node_modules
+
 
 # React .gitingore
 app/react-counter-ui/node_modules
