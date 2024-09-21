@@ -58,29 +58,26 @@ const App: React.FC = () => {
 
     const handleEphemeralCounterChange = useCallback((accountInfo: AccountInfo<Buffer>) => {
         if (!counterProgramClient.current) return;
-        console.log("handleEphemeralCounterChange", accountInfo);
         const decodedData = counterProgramClient.current.coder.accounts.decode('counter', accountInfo.data);
         setEphemeralCounter(Number(decodedData.count));
     }, []);
 
     // Subscribe to the counters updates
     const subscribeToCounter = useCallback(async (): Promise<void> => {
-        console.log("Subscribing to counter", counterPda.toBase58());
         if (counterSubscriptionId && counterSubscriptionId.current) await connection.removeAccountChangeListener(counterSubscriptionId.current);
+        console.log("Subscribing to counter", counterPda.toBase58());
         // Subscribe to counter changes
         counterSubscriptionId.current = connection.onAccountChange(counterPda, handleCounterChange, 'processed');
     }, [connection, counterPda, handleCounterChange]);
 
     // Subscribe to the ephemeral counter updates
     const subscribeToEphemeralCounter = useCallback(async (): Promise<void> => {
-        console.log("Try Subscribing to ephemeral counter");
-        console.log(ephemeralConnection)
         if(!ephemeralConnection.current) return;
         console.log("Subscribing to ephemeral counter", counterPda.toBase58());
         if (ephemeralCounterSubscriptionId && ephemeralCounterSubscriptionId.current) await ephemeralConnection.current.removeAccountChangeListener(ephemeralCounterSubscriptionId.current);
-        // Subscribe to counter changes
+        // Subscribe to ephemeral counter changes
         ephemeralCounterSubscriptionId.current = ephemeralConnection.current.onAccountChange(counterPda, handleEphemeralCounterChange, 'processed');
-    }, [ephemeralConnection, counterPda, handleCounterChange]);
+    }, [counterPda, handleEphemeralCounterChange]);
 
     useEffect(() => {
         const initializeProgramClient = async () => {
@@ -101,7 +98,6 @@ const App: React.FC = () => {
     // Detect when publicKey is set/connected
     useEffect(() => {
         if (!publicKey) return;
-        console.log(Keypair.fromSeed(publicKey.toBytes()).publicKey);
         if (!publicKey || Keypair.fromSeed(publicKey.toBytes()).publicKey.equals(tempKeypair.current?.publicKey || PublicKey.default)) return;
         console.log("Wallet connected with publicKey:", publicKey.toBase58());
         // Derive the temp keypair from the publicKey
@@ -112,13 +108,16 @@ const App: React.FC = () => {
 
     useEffect(() => {
         const initializeEphemeralConnection = async (cluster: string) => {
-            console.log("A");
             if(ephemeralConnection.current) {
-                console.log(ephemeralConnection.current);
                 return;
             }
             ephemeralConnection.current = new Connection(cluster);
-            console.log("B");
+            // Airdrop to trigger lazy reload
+            try {
+                await ephemeralConnection.current?.requestAirdrop(counterPda, 1);
+            }catch (_){
+                console.log("Refreshed account in the ephemeral");
+            }
             const accountInfo = await ephemeralConnection.current.getAccountInfo(counterPda);
             if (accountInfo) {
                 // @ts-ignore
@@ -137,7 +136,6 @@ const App: React.FC = () => {
 
 
     const submitTransaction = useCallback(async (transaction: Transaction, useTempKeypair: boolean = false, ephemeral: boolean = false, confirmCommitment : Commitment = "processed"): Promise<string | null> => {
-        console.log("Request submitting transaction...");
         if (!tempKeypair.current) return null;
         if (!publicKey) return null;
         if (!ephemeralConnection.current) return null;
@@ -222,7 +220,6 @@ const App: React.FC = () => {
         console.log("Delegate PDA transaction");
         console.log(tempKeypair.current);
         if (!tempKeypair.current) return;
-        console.log("B");
         const {
             delegationPda,
             delegationMetadata,
@@ -246,13 +243,7 @@ const App: React.FC = () => {
             .transaction() as Transaction;
         setEphemeralCounter(Number(counter));
         await submitTransaction(transaction, true, false, "confirmed");
-        // // Airdrop to trigger lazy reload
-        // try {
-        //     await ephemeralConnection.current?.requestAirdrop(counterPda, 1);
-        // }catch (_){
-        //     console.log("Refreshed account in the ephemeral");
-        // }
-    }, [tempKeypair, counterPda, connection, submitTransaction, transferToTempKeypair]);
+    }, [counterPda, connection, counter, submitTransaction, transferToTempKeypair]);
 
     /**
      * Undelegate PDA transaction
