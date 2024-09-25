@@ -4,7 +4,7 @@ import Square from "./components/Square";
 import {useConnection, useWallet} from '@solana/wallet-adapter-react';
 import {WalletMultiButton} from "@solana/wallet-adapter-react-ui";
 import Alert from "./components/Alert";
-import {Program, Provider} from "@coral-xyz/anchor";
+import {BN, Program, Provider} from "@coral-xyz/anchor";
 import {SimpleProvider} from "./components/Wallet";
 import {
     AccountInfo,
@@ -20,6 +20,7 @@ import {DelegateAccounts, DELEGATION_PROGRAM_ID, MAGIC_PROGRAM_ID} from "@magicb
 
 const COUNTER_PDA_SEED = "test-pda";
 const COUNTER_PROGRAM = new PublicKey("852a53jomx7dGmkpbFPGXNJymRxywo3WsH1vusNASJRr");
+const MINTER_PROGRAM = new PublicKey("HfPTAU1bZBHPqcpEGweinAH9zsPafYnnaxk4k5xsTU3M");
 
 const App: React.FC = () => {
     let { connection } = useConnection();
@@ -34,6 +35,7 @@ const App: React.FC = () => {
     const [transactionError, setTransactionError] = useState<string | null>(null);
     const [transactionSuccess, setTransactionSuccess] = useState<string | null>(null);
     const counterProgramClient = useRef<Program | null>(null);
+    const minterProgramClient = useRef<Program | null>(null);
     const [counterPda] = PublicKey.findProgramAddressSync(
         [Buffer.from(COUNTER_PDA_SEED)],
         COUNTER_PROGRAM
@@ -83,6 +85,7 @@ const App: React.FC = () => {
         const initializeProgramClient = async () => {
             if(counterProgramClient.current) return;
             counterProgramClient.current = await getProgramClient(COUNTER_PROGRAM);
+            minterProgramClient.current = await getProgramClient(MINTER_PROGRAM);
             const accountInfo = await provider.current.connection.getAccountInfo(counterPda);
             if (accountInfo) {
                 // @ts-ignore
@@ -96,7 +99,7 @@ const App: React.FC = () => {
     }, [connection, counterPda, getProgramClient, subscribeToCounter]);
 
     // Detect when publicKey is set/connected
-    useEffect(() => {
+    useEffect( () => {
         if (!publicKey) return;
         if (!publicKey || Keypair.fromSeed(publicKey.toBytes()).publicKey.equals(tempKeypair.current?.publicKey || PublicKey.default)) return;
         console.log("Wallet connected with publicKey:", publicKey.toBase58());
@@ -105,6 +108,19 @@ const App: React.FC = () => {
         tempKeypair.current = newTempKeypair;
         console.log("Temp Keypair", newTempKeypair.publicKey.toBase58());
     }, [connection, publicKey]);
+
+    useEffect(() => {
+        const checkAndTransfer = async () => {
+            if (tempKeypair.current) {
+                const accountTmpWallet = await connection.getAccountInfo(tempKeypair.current.publicKey);
+                if (!accountTmpWallet || accountTmpWallet.lamports <= 0.01 * LAMPORTS_PER_SOL) {
+                    await transferToTempKeypair()
+                }
+            }
+        };
+        checkAndTransfer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isDelegated, connection]);
 
     useEffect(() => {
         const initializeEphemeralConnection = async (cluster: string) => {
@@ -194,7 +210,13 @@ const App: React.FC = () => {
      * Increase counter transaction
      */
     const increaseCounterTx = useCallback(async () => {
-        if (!tempKeypair) return;
+        if (!tempKeypair.current) return;
+        if(!isDelegated){
+            const accountTmpWallet = await connection.getAccountInfo(tempKeypair.current.publicKey);
+            if (!accountTmpWallet || accountTmpWallet.lamports <= 0.01 * LAMPORTS_PER_SOL) {
+                await transferToTempKeypair()
+            }
+        }
 
         const transaction = await counterProgramClient.current?.methods
             .increment()
@@ -211,7 +233,7 @@ const App: React.FC = () => {
         transaction.add(noopInstruction);
 
         await submitTransaction(transaction, true, isDelegated);
-    }, [tempKeypair, counterPda, submitTransaction, isDelegated]);
+    }, [isDelegated, counterPda, submitTransaction, connection, transferToTempKeypair]);
 
     /**
      * Delegate PDA transaction
@@ -252,7 +274,7 @@ const App: React.FC = () => {
         if (!tempKeypair.current) return;
         console.log("Undelegate PDA transaction");
         const transaction = await counterProgramClient.current?.methods
-            .incrementAndUndelegate()
+            .undelegate()
             .accounts({
                 payer: tempKeypair.current.publicKey,
                 counter: counterPda,
@@ -262,6 +284,23 @@ const App: React.FC = () => {
 
         await submitTransaction(transaction, true, true);
     }, [tempKeypair, counterPda, submitTransaction]);
+
+    /**
+     * Mint token transaction
+     */
+    const mintTokenTroughPdaTx = useCallback(async () => {
+        if (!publicKey) return;
+        console.log("Mint transaction");
+        const transaction = await minterProgramClient.current?.methods
+            .mintToken(new BN(counter))
+            .accounts({
+                payer: publicKey,
+                counter: counterPda,
+            })
+            .transaction() as Transaction;
+
+        await submitTransaction(transaction, false, false);
+    }, [publicKey, counter, counterPda, submitTransaction]);
 
     /**
      * -------
@@ -275,10 +314,14 @@ const App: React.FC = () => {
         await undelegatePdaTx();
     }, [undelegatePdaTx]);
 
+    const mintTokenTx = useCallback(async () => {
+        await mintTokenTroughPdaTx();
+    }, [mintTokenTroughPdaTx]);
+
     return (
         <div className="counter-ui">
             <div className="wallet-buttons">
-                <WalletMultiButton />
+                <WalletMultiButton/>
             </div>
 
             <h1>Ephemeral Counter</h1>
@@ -293,7 +336,7 @@ const App: React.FC = () => {
                     key="0"
                     ind={Number(0)}
                     updateSquares={(index: string | number) => updateCounter(Number(index))}
-                    clsName={isDelegated ?  '' : counter.toString()}
+                    clsName={isDelegated ? '' : counter.toString()}
                 />
                 <Square
                     key="1"
@@ -316,11 +359,18 @@ const App: React.FC = () => {
                 </div>
             )}
 
-            {transactionError && <Alert type="error" message={transactionError} onClose={() => setTransactionError(null)} />}
+            <div className="button-container">
+                <Button title={"Mint"} resetGame={mintTokenTx} />
+            </div>
 
-            {transactionSuccess && <Alert type="success" message={transactionSuccess} onClose={() => setTransactionSuccess(null)} />}
+            {transactionError &&
+                <Alert type="error" message={transactionError} onClose={() => setTransactionError(null)}/>}
 
-            <img src={`${process.env.PUBLIC_URL}/magicblock_white.svg`} alt="Magic Block Logo" className="magicblock-logo" />
+            {transactionSuccess &&
+                <Alert type="success" message={transactionSuccess} onClose={() => setTransactionSuccess(null)}/>}
+
+            <img src={`${process.env.PUBLIC_URL}/magicblock_white.svg`} alt="Magic Block Logo"
+                 className="magicblock-logo"/>
         </div>
     );
 };
