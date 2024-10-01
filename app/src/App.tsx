@@ -16,7 +16,6 @@ import {
     SystemProgram,
     Transaction, TransactionInstruction
 } from "@solana/web3.js";
-import {DelegateAccounts, DELEGATION_PROGRAM_ID, MAGIC_PROGRAM_ID} from "@magicblock-labs/ephemeral-rollups-sdk";
 
 const COUNTER_PDA_SEED = "test-pda";
 const COUNTER_PROGRAM = new PublicKey("852a53jomx7dGmkpbFPGXNJymRxywo3WsH1vusNASJRr");
@@ -173,7 +172,7 @@ const App: React.FC = () => {
             if(!ephemeral && !useTempKeypair){
                 signature = await sendTransaction(transaction, connection, { minContextSlot});
             }else{
-                signature = await connection.sendRawTransaction(transaction.serialize());
+                signature = await connection.sendRawTransaction(transaction.serialize(), {skipPreflight: true});
             }
             await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature }, confirmCommitment);
             // Transaction was successful
@@ -242,11 +241,6 @@ const App: React.FC = () => {
         console.log("Delegate PDA transaction");
         console.log(tempKeypair.current);
         if (!tempKeypair.current) return;
-        const {
-            delegationPda,
-            delegationMetadata,
-            bufferPda,
-        } = DelegateAccounts(counterPda, counterProgramClient.current?.programId as PublicKey);
         const accountTmpWallet = await connection.getAccountInfo(tempKeypair.current.publicKey);
         if (!accountTmpWallet || accountTmpWallet.lamports <= 0.01 * LAMPORTS_PER_SOL) {
             await transferToTempKeypair()
@@ -255,12 +249,7 @@ const App: React.FC = () => {
             .delegate()
             .accounts({
                 payer: tempKeypair.current.publicKey,
-                pda: counterPda,
-                ownerProgram: counterProgramClient.current?.programId,
-                delegationMetadata: delegationMetadata,
-                buffer: bufferPda,
-                delegationRecord: delegationPda,
-                delegationProgram: DELEGATION_PROGRAM_ID,
+                pda: counterPda
             })
             .transaction() as Transaction;
         setEphemeralCounter(Number(counter));
@@ -278,7 +267,6 @@ const App: React.FC = () => {
             .accounts({
                 payer: tempKeypair.current.publicKey,
                 counter: counterPda,
-                magicProgram: MAGIC_PROGRAM_ID,
             })
             .transaction() as Transaction;
 
@@ -292,7 +280,7 @@ const App: React.FC = () => {
         if (!publicKey) return;
         console.log("Mint transaction");
         const transaction = await minterProgramClient.current?.methods
-            .mintToken(new BN(counter))
+            .mintToken(isDelegated ?  new BN(ephemeralCounter) : new BN(counter))
             .accounts({
                 payer: publicKey,
                 counter: counterPda,
@@ -300,6 +288,7 @@ const App: React.FC = () => {
             .transaction() as Transaction;
 
         await submitTransaction(transaction, false, false);
+    // eslint-disable-next-line
     }, [publicKey, counter, counterPda, submitTransaction]);
 
     /**
