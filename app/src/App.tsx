@@ -122,7 +122,8 @@ const App: React.FC = () => {
     }, [isDelegated, connection]);
 
     useEffect(() => {
-        const initializeEphemeralConnection = async (cluster: string) => {
+        const initializeEphemeralConnection = async () => {
+            const cluster = process.env.REACT_APP_MAGICBLOCK_URL || "https://devnet.magicblock.app"
             if(ephemeralConnection.current) {
                 return;
             }
@@ -142,7 +143,7 @@ const App: React.FC = () => {
             }
             await subscribeToEphemeralCounter();
         };
-        initializeEphemeralConnection(process.env.REACT_APP_MAGICBLOCK_URL || "https://devnet.magicblock.app").catch(console.error);
+        initializeEphemeralConnection().catch(console.error);
     }, [counterPda, subscribeToCounter, subscribeToEphemeralCounter]);
 
     const updateCounter = async (_: number): Promise<void> => {
