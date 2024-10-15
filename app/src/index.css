@@ -167,8 +167,8 @@ body {
     gap: 15px;
 }
 
-.wallet-buttons button{
-    min-width: 10rem;
+.wallet-buttons button {
+    min-width: 12rem;
 }
 
 .magicblock-logo {
