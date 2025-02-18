@@ -8,7 +8,7 @@ The UI demonstrates the use of Solana's ephemeral rollups with a simple counter 
 
 ## Documentation
 
-For more information, visit: [Ephemeral Rollups Documentation](https://docs.magiblock.gg/Accelerate/ephemeral_rollups).
+For more information, visit: [Ephemeral Rollups Documentation](https://docs.magicblock.gg/Accelerate/ephemeral_rollups).
 
 ## Getting Started
 
