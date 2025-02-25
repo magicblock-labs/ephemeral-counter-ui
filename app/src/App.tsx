@@ -51,6 +51,7 @@ const App: React.FC = () => {
 
     // Define callbacks function to handle account changes
     const handleCounterChange = useCallback((accountInfo: AccountInfo<Buffer>) => {
+        console.log("Ephemeral counter changed", accountInfo);
         if (!counterProgramClient.current) return;
         const decodedData = counterProgramClient.current.coder.accounts.decode('counter', accountInfo.data);
         setIsDelegated(!accountInfo.owner.equals(counterProgramClient.current.programId));
@@ -58,6 +59,7 @@ const App: React.FC = () => {
     }, []);
 
     const handleEphemeralCounterChange = useCallback((accountInfo: AccountInfo<Buffer>) => {
+        console.log("Ephemeral counter changed", accountInfo);
         if (!counterProgramClient.current) return;
         const decodedData = counterProgramClient.current.coder.accounts.decode('counter', accountInfo.data);
         setEphemeralCounter(Number(decodedData.count));
@@ -77,7 +79,7 @@ const App: React.FC = () => {
         console.log("Subscribing to ephemeral counter", counterPda.toBase58());
         if (ephemeralCounterSubscriptionId && ephemeralCounterSubscriptionId.current) await ephemeralConnection.current.removeAccountChangeListener(ephemeralCounterSubscriptionId.current);
         // Subscribe to ephemeral counter changes
-        ephemeralCounterSubscriptionId.current = ephemeralConnection.current.onAccountChange(counterPda, handleEphemeralCounterChange, 'processed');
+        ephemeralCounterSubscriptionId.current = ephemeralConnection.current.onAccountChange(counterPda, handleEphemeralCounterChange, 'finalized');
     }, [counterPda, handleEphemeralCounterChange]);
 
     useEffect(() => {
@@ -124,7 +126,7 @@ const App: React.FC = () => {
     useEffect(() => {
         const initializeEphemeralConnection = async () => {
             const cluster = process.env.REACT_APP_MAGICBLOCK_URL || "https://devnet.magicblock.app"
-            if(ephemeralConnection.current) {
+            if(ephemeralConnection.current || counterProgramClient.current == null) {
                 return;
             }
             ephemeralConnection.current = new Connection(cluster);
@@ -137,7 +139,7 @@ const App: React.FC = () => {
             const accountInfo = await ephemeralConnection.current.getAccountInfo(counterPda);
             if (accountInfo) {
                 // @ts-ignore
-                const counter = await counterProgramClient.current.account.counter.fetch(counterPda);
+                const counter = await counterProgramClient.current.coder.accounts.decode("counter", accountInfo.data);
                 setEphemeralCounter(Number(counter.count.valueOf()));
                 await subscribeToCounter();
             }
