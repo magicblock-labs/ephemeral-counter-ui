@@ -26,8 +26,7 @@ export class SimpleProvider implements Provider {
 }
 
 export const Wallet: FC<WalletProps> = ({ app }) => {
-    const network = WalletAdapterNetwork.Devnet;
-    const endpoint = useMemo(() => clusterApiUrl(network), [network]);
+    const endpoint = "https://rpc.magicblock.app/devnet"
 
     const wallets = useMemo(() => [
         new PhantomWalletAdapter(),

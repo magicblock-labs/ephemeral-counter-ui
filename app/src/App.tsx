@@ -79,7 +79,7 @@ const App: React.FC = () => {
         console.log("Subscribing to ephemeral counter", counterPda.toBase58());
         if (ephemeralCounterSubscriptionId && ephemeralCounterSubscriptionId.current) await ephemeralConnection.current.removeAccountChangeListener(ephemeralCounterSubscriptionId.current);
         // Subscribe to ephemeral counter changes
-        ephemeralCounterSubscriptionId.current = ephemeralConnection.current.onAccountChange(counterPda, handleEphemeralCounterChange, 'finalized');
+        ephemeralCounterSubscriptionId.current = ephemeralConnection.current.onAccountChange(counterPda, handleEphemeralCounterChange, 'confirmed');
     }, [counterPda, handleEphemeralCounterChange]);
 
     useEffect(() => {
