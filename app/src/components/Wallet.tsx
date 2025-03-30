@@ -1,10 +1,9 @@
 import React, {FC, ReactNode, useMemo} from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
-import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 import {
     WalletModalProvider,
 } from '@solana/wallet-adapter-react-ui';
-import {clusterApiUrl, Connection, PublicKey} from '@solana/web3.js';
+import {Connection, PublicKey} from '@solana/web3.js';
 import {PhantomWalletAdapter, SolflareWalletAdapter} from "@solana/wallet-adapter-wallets";
 import {Provider} from "@coral-xyz/anchor";
 
