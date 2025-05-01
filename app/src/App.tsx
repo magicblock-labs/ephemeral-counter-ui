@@ -361,7 +361,7 @@ const App: React.FC = () => {
             {transactionSuccess &&
                 <Alert type="success" message={transactionSuccess} onClose={() => setTransactionSuccess(null)}/>}
 
-            <img src={`${process.env.PUBLIC_URL}/magicblock_white.svg`} alt="Magic Block Logo"
+            <img src={`${process.env.PUBLIC_URL}/magicblock_white.png`} alt="Magic Block Logo"
                  className="magicblock-logo"/>
         </div>
     );
