@@ -25,20 +25,15 @@ const MINTER_PROGRAM = new PublicKey("HfPTAU1bZBHPqcpEGweinAH9zsPafYnnaxk4k5xsTU
 
 export const admin = anchor.web3.Keypair.fromSecretKey(Uint8Array.from([253, 10, 149, 82, 131, 188, 183, 151, 158, 44, 73, 91, 174, 72, 6, 46, 18, 145, 15, 114, 9, 197, 106, 230, 153, 58, 2, 61, 250, 229, 64, 206, 150, 12, 231, 71, 168, 70, 194, 36, 149, 232, 43, 104, 73, 202, 187, 141, 196, 201, 107, 161, 218, 75, 76, 217, 67, 139, 220, 181, 103, 181, 68, 176]));
 
-//const anchorProvider = anchor.AnchorProvider.local("http://127.0.0.1:8899");
-//anchor.setProvider(anchorProvider);
-
 const ephemeralCounterGlobal = "A1wk6oPVA6FFSwqnW7XE4EigE7oDcnQ6AV1V8dikD3wo";
 
 const App: React.FC = () => {
     console.info("admin: ", admin.publicKey.toBase58());
     let { connection } = useConnection();
-    //let connection = anchorProvider.connection;
 
     const ephemeralConnection = useRef<Connection | null>(null);
 
     const provider = useRef<Provider>(new SimpleProvider(connection, admin.publicKey));
-
 
     //const { publicKey, sendTransaction } = useWallet();
     const publicKey = admin.publicKey;
@@ -133,7 +128,7 @@ const App: React.FC = () => {
             // minterProgramClient.current = await getProgramClient(MINTER_PROGRAM);
             const accountInfo = await provider.current.connection.getAccountInfo(counterPda);
             if (accountInfo) {
-                console.info("counterPda eixsts, use its counter: ", accountInfo);
+                console.info("counterPda eixsts, use its counter: ", accountInfo.owner.equals(COUNTER_PROGRAM), accountInfo);
                 // @ts-ignore
                 const counter = await counterProgramClient.current.account.counter.fetch(counterPda);
                 setCounter(Number(counter.count.valueOf()));
@@ -205,7 +200,12 @@ const App: React.FC = () => {
     };
 
 
-    const submitTransaction = useCallback(async (transaction: Transaction, useTempKeypair: boolean = false, ephemeral: boolean = false, confirmCommitment: Commitment = "processed"): Promise<string | null> => {
+    const submitTransaction = useCallback(async (
+        transaction: Transaction,
+        useTempKeypair: boolean = false,
+        ephemeral: boolean = false,
+        confirmCommitment: Commitment = "processed"
+    ): Promise<string | null> => {
         if (!tempKeypair.current) {
             console.log("tempKeypair is not set");
             return null;
@@ -231,7 +231,7 @@ const App: React.FC = () => {
                 context: { slot: minContextSlot },
                 value: { blockhash, lastValidBlockHeight }
             } = await connection.getLatestBlockhashAndContext();
-            console.log("Submitting transaction...", minContextSlot, blockhash, lastValidBlockHeight);
+            // console.log("Submitting transaction...", minContextSlot, blockhash, lastValidBlockHeight);
             if (!transaction.recentBlockhash) transaction.recentBlockhash = blockhash;
             if (!transaction.feePayer) useTempKeypair ? transaction.feePayer = tempKeypair.current.publicKey : transaction.feePayer = publicKey;
             if (useTempKeypair) transaction.sign(tempKeypair.current);
@@ -304,7 +304,7 @@ const App: React.FC = () => {
         // });
         // transaction.add(noopInstruction);
 
-        let ret = await submitTransaction(transaction, true, isDelegated);
+        await submitTransaction(transaction, true, isDelegated);
     }, [isDelegated, counterPda, submitTransaction, connection, transferToTempKeypair]);
 
     /**
