@@ -58,6 +58,8 @@ const App: React.FC = () => {
     );
     let counterSubscriptionId = useRef<number | null>(null);
     let ephemeralCounterSubscriptionId = useRef<number | null>(null);
+    const [counterProgramClientInitialized, setCounterProgramClientInitialized] = useState(false);
+
 
     // Helpers to Dynamically fetch the IDL and initialize the program client
     const getProgramClient = useCallback(async (program: PublicKey): Promise<Program> => {
@@ -65,6 +67,29 @@ const App: React.FC = () => {
         if (!idl) throw new Error(`IDL not found : ${program.toBase58()}`);
         return new Program(idl, provider.current);
     }, [provider]);
+
+    const initializeCounterPdaIfNeeded = useCallback(async () => {
+        const transaction = await counterProgramClient.current?.methods
+            .initialize()
+            .accounts({
+                counter: counterPda,
+                user: admin.publicKey,
+                systemProgram: SystemProgram.programId,
+            }).signers([admin]).transaction() as Transaction;
+
+        // Add instruction to print to the noop program and and make the transaction unique
+        // const noopInstruction = new TransactionInstruction({
+        //     programId: new PublicKey('noopb9bkMVfRPU8AsbpTUg8AQkHtKwMYZiFUjNRtMmV'),
+        //     keys: [],
+        //     data: Buffer.from(crypto.getRandomValues(new Uint8Array(5))),
+        // });
+        // transaction.add(noopInstruction);
+
+        await submitTransaction(transaction, false, false); //true, isDelegated);
+
+        console.info("initializeCounterPdaIfNeeded DONE: counterPda  = ", counterPda.toBase58());
+
+    }, [getProgramClient, counterProgramClientInitialized]);
 
     // Define callbacks function to handle account changes
     const handleCounterChange = useCallback((accountInfo: AccountInfo<Buffer>) => {
@@ -98,8 +123,6 @@ const App: React.FC = () => {
         // Subscribe to ephemeral counter changes
         ephemeralCounterSubscriptionId.current = ephemeralConnection.current.onAccountChange(counterPda, handleEphemeralCounterChange, 'confirmed');
     }, [counterPda, handleEphemeralCounterChange]);
-
-    const [counterProgramClientInitialized, setCounterProgramClientInitialized] = useState(false);
 
     useEffect(() => {
         const initializeProgramClient = async () => {
@@ -214,8 +237,10 @@ const App: React.FC = () => {
             if (useTempKeypair) transaction.sign(tempKeypair.current);
             let signature;
             if (!ephemeral && !useTempKeypair) {
+                console.log("INVOKE sendTransaction");
                 signature = await connection.sendTransaction(transaction, [admin], { minContextSlot });
             } else {
+                console.log("INVOKE sendRawTransaction");
                 signature = await connection.sendRawTransaction(transaction.serialize(), { skipPreflight: true });
             }
             await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature }, confirmCommitment);
@@ -249,6 +274,7 @@ const App: React.FC = () => {
         await submitTransaction(transaction);
     }, [publicKey, tempKeypair, connection, submitTransaction]);
 
+
     /**
      * Increase counter transaction
      */
@@ -261,6 +287,8 @@ const App: React.FC = () => {
                 await transferToTempKeypair()
             }
         }
+
+        // await initializeCounterPdaIfNeeded();
 
         const transaction = await counterProgramClient.current?.methods
             .increment()
