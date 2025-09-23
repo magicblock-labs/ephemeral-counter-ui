@@ -19,9 +19,7 @@ import {
 } from "@solana/web3.js";
 
 const COUNTER_PDA_SEED = "test-pda";
-//const COUNTER_PROGRAM = new PublicKey("852a53jomx7dGmkpbFPGXNJymRxywo3WsH1vusNASJRr");
 const COUNTER_PROGRAM = new PublicKey("9javwxMaxnEb7gguTnTr6Bgb8HRNxWvBNKAUjg3SiXMV");
-const MINTER_PROGRAM = new PublicKey("HfPTAU1bZBHPqcpEGweinAH9zsPafYnnaxk4k5xsTU3M");
 
 export const admin = anchor.web3.Keypair.fromSecretKey(Uint8Array.from([253, 10, 149, 82, 131, 188, 183, 151, 158, 44, 73, 91, 174, 72, 6, 46, 18, 145, 15, 114, 9, 197, 106, 230, 153, 58, 2, 61, 250, 229, 64, 206, 150, 12, 231, 71, 168, 70, 194, 36, 149, 232, 43, 104, 73, 202, 187, 141, 196, 201, 107, 161, 218, 75, 76, 217, 67, 139, 220, 181, 103, 181, 68, 176]));
 
@@ -35,7 +33,6 @@ const App: React.FC = () => {
 
     const provider = useRef<Provider>(new SimpleProvider(connection, admin.publicKey));
 
-    //const { publicKey, sendTransaction } = useWallet();
     const publicKey = admin.publicKey;
 
     const tempKeypair = useRef<Keypair | null>(null);
@@ -46,7 +43,6 @@ const App: React.FC = () => {
     const [transactionError, setTransactionError] = useState<string | null>(null);
     const [transactionSuccess, setTransactionSuccess] = useState<string | null>(null);
     const counterProgramClient = useRef<Program | null>(null);
-    // const minterProgramClient = useRef<Program | null>(null);
     const [counterPda] = PublicKey.findProgramAddressSync(
         [Buffer.from(COUNTER_PDA_SEED)],
         COUNTER_PROGRAM
@@ -125,7 +121,6 @@ const App: React.FC = () => {
             if (counterProgramClient.current) return;
             counterProgramClient.current = await getProgramClient(COUNTER_PROGRAM);
             //console.log("counterProgramClient initialized");
-            // minterProgramClient.current = await getProgramClient(MINTER_PROGRAM);
             const accountInfo = await provider.current.connection.getAccountInfo(counterPda);
             if (accountInfo) {
                 console.info("counterPda eixsts, use its counter: ", accountInfo.owner.equals(COUNTER_PROGRAM), accountInfo);
@@ -237,10 +232,10 @@ const App: React.FC = () => {
             if (useTempKeypair) transaction.sign(tempKeypair.current);
             let signature;
             if (!ephemeral && !useTempKeypair) {
-                console.log("INVOKE sendTransaction");
+                console.log("INVOKE sendTransaction on Devnet");
                 signature = await connection.sendTransaction(transaction, [admin], { minContextSlot });
             } else {
-                console.log("INVOKE sendRawTransaction");
+                console.log("INVOKE sendRawTransaction on Ephemeral");
                 signature = await connection.sendRawTransaction(transaction.serialize(), { skipPreflight: true });
             }
             await connection.confirmTransaction({ blockhash, lastValidBlockHeight, signature }, confirmCommitment);
@@ -348,24 +343,6 @@ const App: React.FC = () => {
     }, [tempKeypair, counterPda, submitTransaction]);
 
     /**
-     * Mint token transaction
-     */
-    const mintTokenTroughPdaTx = useCallback(async () => {
-        // if (!publicKey) return;
-        // console.log("Mint transaction");
-        // const transaction = await minterProgramClient.current?.methods
-        //     .mintToken(isDelegated ? new BN(ephemeralCounter) : new BN(counter))
-        //     .accounts({
-        //         payer: publicKey,
-        //         counter: counterPda,
-        //     })
-        //     .transaction() as Transaction;
-
-        // await submitTransaction(transaction, false, false);
-        // eslint-disable-next-line
-    }, [publicKey, counter, counterPda, submitTransaction]);
-
-    /**
      * -------
      */
 
@@ -376,10 +353,6 @@ const App: React.FC = () => {
     const undelegateTx = useCallback(async () => {
         await undelegatePdaTx();
     }, [undelegatePdaTx]);
-
-    const mintTokenTx = useCallback(async () => {
-        await mintTokenTroughPdaTx();
-    }, [mintTokenTroughPdaTx]);
 
     return (
         <div className="counter-ui">
@@ -421,10 +394,6 @@ const App: React.FC = () => {
                 <div className="spinner"></div>
             </div>
             )}
-
-            <div className="button-container">
-                <Button title={"Mint"} resetGame={mintTokenTx} />
-            </div>
 
             {transactionError &&
                 <Alert type="error" message={transactionError} onClose={() => setTransactionError(null)} />}
