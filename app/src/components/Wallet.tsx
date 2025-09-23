@@ -1,11 +1,11 @@
-import React, {FC, ReactNode, useMemo} from 'react';
+import React, { FC, ReactNode, useMemo } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
 import {
     WalletModalProvider,
 } from '@solana/wallet-adapter-react-ui';
-import {Connection, PublicKey} from '@solana/web3.js';
-import {PhantomWalletAdapter, SolflareWalletAdapter} from "@solana/wallet-adapter-wallets";
-import {Provider} from "@coral-xyz/anchor";
+import { Connection, PublicKey } from '@solana/web3.js';
+import { PhantomWalletAdapter, SolflareWalletAdapter } from "@solana/wallet-adapter-wallets";
+import { Provider } from "@coral-xyz/anchor";
 
 // Default styles that can be overridden by your app
 require('@solana/wallet-adapter-react-ui/styles.css');
@@ -25,7 +25,7 @@ export class SimpleProvider implements Provider {
 }
 
 export const Wallet: FC<WalletProps> = ({ app }) => {
-    const endpoint = "https://rpc.magicblock.app/devnet"
+    const endpoint = "http://localhost:8899"
 
     const wallets = useMemo(() => [
         new PhantomWalletAdapter(),
