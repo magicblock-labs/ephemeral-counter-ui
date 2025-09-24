@@ -26,7 +26,7 @@ export const admin = anchor.web3.Keypair.fromSecretKey(Uint8Array.from([253, 10,
 const ephemeralCounterGlobal = "A1wk6oPVA6FFSwqnW7XE4EigE7oDcnQ6AV1V8dikD3wo";
 
 const App: React.FC = () => {
-    console.info("admin: ", admin.publicKey.toBase58());
+    // console.info("admin: ", admin.publicKey.toBase58());
     let { connection } = useConnection();
 
     const ephemeralConnection = useRef<Connection | null>(null);
@@ -68,14 +68,6 @@ const App: React.FC = () => {
                 systemProgram: SystemProgram.programId,
             }).signers([admin]).transaction() as Transaction;
 
-        // Add instruction to print to the noop program and and make the transaction unique
-        // const noopInstruction = new TransactionInstruction({
-        //     programId: new PublicKey('noopb9bkMVfRPU8AsbpTUg8AQkHtKwMYZiFUjNRtMmV'),
-        //     keys: [],
-        //     data: Buffer.from(crypto.getRandomValues(new Uint8Array(5))),
-        // });
-        // transaction.add(noopInstruction);
-
         await submitTransaction(transaction, false, false); //true, isDelegated);
 
         console.info("initializeCounterPdaIfNeeded DONE: counterPda  = ", counterPda.toBase58());
@@ -84,7 +76,7 @@ const App: React.FC = () => {
 
     // Define callbacks function to handle account changes
     const handleCounterChange = useCallback((accountInfo: AccountInfo<Buffer>) => {
-        console.error("Ephemeral counter changed", accountInfo);
+        console.info("Counter changed", accountInfo);
         if (!counterProgramClient.current) return;
         const decodedData = counterProgramClient.current.coder.accounts.decode('counter', accountInfo.data);
         setIsDelegated(!accountInfo.owner.equals(counterProgramClient.current.programId));
@@ -92,7 +84,7 @@ const App: React.FC = () => {
     }, []);
 
     const handleEphemeralCounterChange = useCallback((accountInfo: AccountInfo<Buffer>) => {
-        console.log("Ephemeral counter changed: ", accountInfo, counterProgramClient.current?.programId);
+        console.info("Ephemeral counter changed: ", accountInfo, counterProgramClient.current?.programId);
         if (!counterProgramClient.current) return;
         const decodedData = counterProgramClient.current.coder.accounts.decode('counter', accountInfo.data);
         setEphemeralCounter(Number(decodedData.count));
@@ -122,6 +114,9 @@ const App: React.FC = () => {
             counterProgramClient.current = await getProgramClient(COUNTER_PROGRAM);
             //console.log("counterProgramClient initialized");
             const accountInfo = await provider.current.connection.getAccountInfo(counterPda);
+
+            console.info("counterPda eixsts? : ", accountInfo, counterPda);
+
             if (accountInfo) {
                 console.info("counterPda eixsts, use its counter: ", accountInfo.owner.equals(COUNTER_PROGRAM), accountInfo);
                 // @ts-ignore
@@ -129,6 +124,8 @@ const App: React.FC = () => {
                 setCounter(Number(counter.count.valueOf()));
                 setIsDelegated(!accountInfo.owner.equals(COUNTER_PROGRAM));
                 await subscribeToCounter();
+            } else {
+                await initializeCounterPdaIfNeeded();
             }
             setCounterProgramClientInitialized(true);
         };
@@ -151,7 +148,7 @@ const App: React.FC = () => {
             if (tempKeypair.current) {
                 const accountTmpWallet = await connection.getAccountInfo(tempKeypair.current.publicKey);
                 if (!accountTmpWallet || accountTmpWallet.lamports <= 0.01 * LAMPORTS_PER_SOL) {
-                    await transferToTempKeypair()
+                    await transferSolToTempKeypair()
                 }
             }
         };
@@ -164,7 +161,9 @@ const App: React.FC = () => {
         const initializeEphemeralConnection = async () => {
             //console.log("initializeEphemeralConnection");
             //const cluster = process.env.REACT_APP_MAGICBLOCK_URL || "https://devnet.magicblock.app"
-            const cluster = "http://localhost:8899";
+            //const cluster = "http://localhost:8899";
+            //const cluster = "https://rpc.magicblock.app/devnet";
+            const cluster = "http://localhost:7799";
             if (ephemeralConnection.current || counterProgramClient.current == null) {
                 //console.warn("initializeEphemeralConnection early return", ephemeralConnection.current, counterProgramClient.current);
                 return;
@@ -227,9 +226,23 @@ const App: React.FC = () => {
                 value: { blockhash, lastValidBlockHeight }
             } = await connection.getLatestBlockhashAndContext();
             // console.log("Submitting transaction...", minContextSlot, blockhash, lastValidBlockHeight);
-            if (!transaction.recentBlockhash) transaction.recentBlockhash = blockhash;
-            if (!transaction.feePayer) useTempKeypair ? transaction.feePayer = tempKeypair.current.publicKey : transaction.feePayer = publicKey;
-            if (useTempKeypair) transaction.sign(tempKeypair.current);
+
+            if (!transaction.recentBlockhash) {
+                transaction.recentBlockhash = blockhash;
+            }
+
+            if (!transaction.feePayer) {
+                if (useTempKeypair) {
+                    transaction.feePayer = tempKeypair.current.publicKey;
+                } else {
+                    transaction.feePayer = publicKey;
+                }
+            }
+
+            if (useTempKeypair) {
+                transaction.sign(tempKeypair.current);
+            }
+
             let signature;
             if (!ephemeral && !useTempKeypair) {
                 console.log("INVOKE sendTransaction on Devnet");
@@ -243,7 +256,18 @@ const App: React.FC = () => {
             console.log(`Transaction confirmed: ${signature}`);
             setTransactionSuccess(`Transaction confirmed`);
             return signature;
-        } catch (error) {
+        } catch (error: any) {
+            if (error) {
+                console.info(`Transaction failed: ${error}`);
+                console.info(`Transaction failed keys: ${Object.keys(error)}`);
+                if ("transactionLogs" in error) {
+                    console.error("Transaction signature:", error.signature);
+                    console.error("Transaction message:", error.transactionMessage);
+                    console.error("Transaction logs:", error.transactionLogs);
+                }
+            } else {
+                console.warn(`Transaction failed: ${error}`);
+            }
             setTransactionError(`Transaction failed: ${error}`);
         } finally {
             setIsSubmitting(false);
@@ -254,7 +278,7 @@ const App: React.FC = () => {
     /**
      * Transfer some SOL to temp keypair
      */
-    const transferToTempKeypair = useCallback(async () => {
+    const transferSolToTempKeypair = useCallback(async () => {
         if (!publicKey || !tempKeypair.current) return;
         console.log("Transfer some SOL to temp keypair");
         const transaction = new Transaction().add(
@@ -279,28 +303,34 @@ const App: React.FC = () => {
         if (!isDelegated) {
             const accountTmpWallet = await connection.getAccountInfo(tempKeypair.current.publicKey);
             if (!accountTmpWallet || accountTmpWallet.lamports <= 0.01 * LAMPORTS_PER_SOL) {
-                await transferToTempKeypair()
+                await transferSolToTempKeypair()
             }
         }
 
         // await initializeCounterPdaIfNeeded();
 
-        const transaction = await counterProgramClient.current?.methods
-            .increment()
-            .accounts({
-                counter: counterPda,
-            }).transaction() as Transaction;
+        try {
+            console.log("INVOKE increment");
+            const transaction = await counterProgramClient.current?.methods
+                .increment(new BN(1), new BN(new Date().getMilliseconds()))
+                .accounts({
+                    counter: counterPda,
+                }).transaction() as Transaction;
+            console.log("INVOKED increment");
 
-        // Add instruction to print to the noop program and and make the transaction unique
-        // const noopInstruction = new TransactionInstruction({
-        //     programId: new PublicKey('noopb9bkMVfRPU8AsbpTUg8AQkHtKwMYZiFUjNRtMmV'),
-        //     keys: [],
-        //     data: Buffer.from(crypto.getRandomValues(new Uint8Array(5))),
-        // });
-        // transaction.add(noopInstruction);
+            // Add instruction to print to the noop program and and make the transaction unique
+            // const noopInstruction = new TransactionInstruction({
+            //     programId: new PublicKey('noopb9bkMVfRPU8AsbpTUg8AQkHtKwMYZiFUjNRtMmV'),
+            //     keys: [],
+            //     data: Buffer.from(crypto.getRandomValues(new Uint8Array(5))),
+            // });
+            // transaction.add(noopInstruction);
 
-        await submitTransaction(transaction, true, isDelegated);
-    }, [isDelegated, counterPda, submitTransaction, connection, transferToTempKeypair]);
+            await submitTransaction(transaction, true, isDelegated);
+        } catch (e) {
+            console.error(e);
+        }
+    }, [isDelegated, counterPda, submitTransaction, connection, transferSolToTempKeypair]);
 
     /**
      * Delegate PDA transaction
@@ -311,7 +341,7 @@ const App: React.FC = () => {
         if (!tempKeypair.current) return;
         const accountTmpWallet = await connection.getAccountInfo(tempKeypair.current.publicKey);
         if (!accountTmpWallet || accountTmpWallet.lamports <= 0.01 * LAMPORTS_PER_SOL) {
-            await transferToTempKeypair()
+            await transferSolToTempKeypair()
         }
         const transaction = await counterProgramClient.current?.methods
             .delegate()
@@ -322,7 +352,7 @@ const App: React.FC = () => {
             .transaction() as Transaction;
         setEphemeralCounter(Number(counter));
         await submitTransaction(transaction, true, false, "confirmed");
-    }, [counterPda, connection, counter, submitTransaction, transferToTempKeypair]);
+    }, [counterPda, connection, counter, submitTransaction, transferSolToTempKeypair]);
 
     /**
      * Undelegate PDA transaction
